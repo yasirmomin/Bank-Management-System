@@ -1,0 +1,11 @@
+# Ignore compiled files
+*.exe
+*.out
+*.o
+*.obj
+*.class
+
+# Ignore backup files
+*.log
+*.tmp
+*.swp
