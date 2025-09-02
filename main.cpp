@@ -38,22 +38,33 @@ public:
     }
 };
 
+struct Transaction {
+    string type;     // deposit,withdrawal,transfer 
+    double amount;   
+    double balanceAfter; 
+    string details;
+};
+
 class Account
 {
 protected:
     long long accountNumber;
     double balance;
-
+    vector<Transaction> transactions; 
 public:
     Account(long long accNo, double bal) : accountNumber(accNo), balance(bal) {}
     // Common function for all accounts
-    void deposit(double amount)
+    void deposit(double amount,long long fromAcc)
     {
         balance += amount;
         cout << "Amount Deposited: " << amount << "\n";
+        string method="Self Deposit";
+        if(fromAcc!=0)
+        method="Received From " + to_string(fromAcc);
+        transactions.push_back({"Deposit", amount, balance, method});
     }
     // Pure virtual function (abstract)
-    virtual void withdraw(double amount) = 0;
+    virtual void withdraw(double amount, long long AccNo) = 0;
     // Getter
     double getBalance() const
     {
@@ -63,6 +74,13 @@ public:
     {
         return accountNumber;
     }
+    void showTransactions() const {
+    cout << "\nTransaction History for Account " << accountNumber << ":\n";
+    for (const auto &t : transactions) {
+        cout << t.type << " | Amount: " << t.amount << " | Balance after: " << t.balanceAfter << " | Details: "<< t.details <<"\n";
+    }
+}
+
     // Virtual destructor (important for abstract base)
     virtual ~Account() {}
 };
@@ -74,12 +92,16 @@ public:
     SavingsAccount(long long accNo, double bal)
         : Account(accNo, bal) {}
     // Withdraw rule: no overdraft
-    void withdraw(double amount) override
+    void withdraw(double amount,long long AccNo) override
     {
         if (amount <= balance)
         {
             balance -= amount;
             cout << "Withdrawn: " << amount << " | New Balance: " << balance << endl;
+            string method="Self Withdrawn";
+            if(AccNo!=0)
+            method = "Transferred to " + to_string(AccNo);
+            transactions.push_back({"Withdraw", amount, balance, method});
         }
         else
         {
@@ -98,13 +120,16 @@ public:
     CurrentAccount(long long accNo, double bal)
         : Account(accNo, bal) {}
     // Withdraw rule: overdraft allowed
-    void withdraw(double amount) override
+    void withdraw(double amount, long long AccNo) override
     {
         if (amount <= balance + overdraftLimit)
         {
             balance -= amount;
-            cout << "Withdrawn: " << amount
-                 << " | New Balance: " << balance << endl;
+            cout << "Withdrawn: " << amount << " | New Balance: " << balance << endl;
+            string method="Self Withdrawn";
+            if(AccNo!=0)
+            method = "Transferred to " + to_string(AccNo);
+            transactions.push_back({"Withdraw", amount, balance,method});
         }
         else
         {
@@ -198,16 +223,25 @@ public:
 
     void deposit(int customerId, long long accNo, double amount)
     {
+        if (amount <= 0) {
+            cout << "❌ Deposit amount must be positive!\n";
+            return;
+        }
         if (!validateCustomerAccount(customerId, accNo))
             return;
-        accounts[accNo]->deposit(amount);
+
+        accounts[accNo]->deposit(amount, 0);
     }
 
     void withdraw(int customerId, long long accNo, double amount)
     {
+        if (amount <= 0) {
+            cout << "❌ Withdrawal amount must be positive!\n";
+            return;
+        }
         if (!validateCustomerAccount(customerId, accNo))
             return;
-        accounts[accNo]->withdraw(amount);
+        accounts[accNo]->withdraw(amount,0);
     }
 
     void checkBalance(int customerId, long long accNo)
@@ -218,12 +252,81 @@ public:
              << " is: " << accounts[accNo]->getBalance() << endl;
     }
 
+    bool getAccountTransactions(int customerId, long long accNo) {
+        if (!validateCustomerAccount(customerId, accNo))
+            return false;
+
+        accounts[accNo]->showTransactions();
+        return true;
+    }   
+
     string getCustomerName(int customerId) {
-    if(customers.find(customerId) != customers.end()) {
-        return customers[customerId]->getName();
+        if(customers.find(customerId) != customers.end()) {
+            return customers[customerId]->getName();
+        }
+        return "";
     }
-    return "";
-}
+
+    bool transferFunds(int customerId, long long fromAcc, long long toAcc, double amount) {
+        if (amount <= 0) {
+            cout << "❌ Transfer amount must be positive!\n";
+            return false;
+        }
+        if (!validateCustomerAccount(customerId, fromAcc)) 
+            return false;
+
+        if (fromAcc == toAcc) {
+            cout << "❌ Cannot transfer to the same account!\n";
+            return false;
+        }
+        if (accounts.find(toAcc) == accounts.end()) {
+            cout << "❌ Target account not found!\n";
+            return false;
+        }
+
+
+        Account* from = accounts[fromAcc];
+        Account* to = accounts[toAcc];
+
+        if (from->getBalance() >= amount) {
+            from->withdraw(amount, toAcc);
+            to->deposit(amount, fromAcc);
+
+            cout << "✅ Transferred " << amount
+                << " from Account " << fromAcc
+                << " to Account " << toAcc << endl;
+            return true;
+        } else {
+            cout << "❌ Insufficient funds!\n";
+            return false;
+        }
+    }
+        void listCustomerAccounts(int customerId) {
+            if (customers.find(customerId) == customers.end()) {
+                cout << "❌ Customer not found!\n";
+                return;
+            }
+            const auto &accs = customers[customerId]->getAccounts();
+            if (accs.empty()) {
+                cout << "❌ No accounts found .\n";
+                return;
+            }
+            cout << "\n--- Your Accounts ---\n";
+            for (auto accNo : accs) {
+                cout << "Account Number: " << accNo
+                    << " | Balance: " << accounts[accNo]->getBalance() << "\n";
+            }
+        }
+
+        ~Bank() {
+            for (auto &p : customers) {
+                delete p.second;
+            }
+            for (auto &p : accounts) {
+                delete p.second;
+            }
+        }
+
 
 private:
     bool validateCustomerAccount(int customerId, long long accNo)
@@ -256,7 +359,10 @@ void customerMenu(Bank &bank, int customerId) {
         cout << "2. Deposit\n";
         cout << "3. Withdraw\n";
         cout << "4. Check Balance\n";
-        cout << "5. Logout\n";
+        cout << "5. View Transactions\n";
+        cout << "6. Transfer Funds\n";
+        cout << "7. View Your Accounts\n";
+        cout << "8. Logout\n";
         cout << "Enter your choice: ";
         cin >> choice;
 
@@ -301,8 +407,31 @@ void customerMenu(Bank &bank, int customerId) {
                 bank.checkBalance(customerId, accNo);
                 break;
             }
+            case 5: {
+                long long accNo;
+                cout << "Enter account number: ";
+                cin >> accNo;
+                bank.getAccountTransactions(customerId,accNo);
+                break;
 
-            case 5:
+            }
+            case 6: {
+                long long fromAcc, toAcc;
+                double amt;
+                cout << "Enter Your Account Number: ";
+                cin >> fromAcc;
+                cout << "Enter Recipient Account Number: ";
+                cin >> toAcc;
+                cout << "Enter Amount to Transfer: ";
+                cin >> amt;
+                bank.transferFunds(customerId,fromAcc, toAcc, amt);
+                break;
+            }
+            case 7: {
+                bank.listCustomerAccounts(customerId);
+                break;
+            }
+            case 8:
                 cout << "Logging out...\n";
                 break;
 
@@ -310,9 +439,8 @@ void customerMenu(Bank &bank, int customerId) {
                 cout << "❌ Invalid choice!\n";
         }
 
-    } while (choice != 5);
+    } while (choice != 8);
 }
-
 
 int main()
 {
@@ -331,39 +459,40 @@ int main()
         switch (choice)
         {
         case 1: {
-    string name, email, phone, password;
-    cout << "\nEnter Name: "; cin >> ws; getline(cin, name);
-    cout << "Enter Email: "; cin >> email;
-    cout << "Enter Phone: "; cin >> phone;
-    cout << "Enter Password: "; cin >> password;
+            string name, email, phone, password;
+            cout << "\nEnter Name: "; cin >> ws; getline(cin, name);
+            cout << "Enter Email: "; cin >> email;
+            cout << "Enter Phone: "; cin >> phone;
+            cout << "Enter Password: "; cin >> password;
 
-    int id = myBank.addCustomer(name, email, phone, password);
-    if (id != -1) {
-        cout << "Welcome, " << name << "! You have been registered successfully.\n";
-    }
-    break;
-}
+            int id = myBank.addCustomer(name, email, phone, password);
+            if (id != -1) {
+                cout << "Welcome, " << name << "! You have been registered successfully.\n";
+            }
+            break;
+        }
 
 
         case 2: {
-    string email, password;
-    cout << "\nEnter Email: ";
-    cin >> email;
-    cout << "Enter Password: ";
-    cin >> password;
+            string email, password;
+            cout << "\nEnter Email: ";
+            cin >> email;
+            cout << "Enter Password: ";
+            cin >> password;
 
-    int customerId = myBank.login(email, password);
-    if (customerId != -1) {
-        cout << "Hello, " << myBank.getCustomerName(customerId) << "! You are now logged in.\n";
-        customerMenu(myBank, customerId);  
-    }
-    break;
-}
+            int customerId = myBank.login(email, password);
+            if (customerId != -1) {
+                cout << "Hello, " << myBank.getCustomerName(customerId) << "! You are now logged in.\n";
+                customerMenu(myBank, customerId);  
+            }
+            break;
+        }
 
 
-        case 3:
+        case 3:{
             cout << "Exiting...\n";
             break;
+        }
         default:
             cout << "❌ Invalid choice! Try again.\n";
         }
