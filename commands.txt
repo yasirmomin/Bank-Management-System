@@ -1,0 +1,9 @@
+docker exec -it bms-app-1 bash
+
+g++ main.cpp -o main -I/usr/include/mysql -lmysqlclient
+
+./main
+
+docker compose down
+
+docker compose up -d
