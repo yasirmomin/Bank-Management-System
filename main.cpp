@@ -16,15 +16,13 @@ private:
     string name;
     string email;
     string phone;
-    string passwordHash;              // for now store plain text, later hash it
+    string passwordHash;              
     vector<long long> accountNumbers; // list of account numbers
 
 public:
     // Constructor to initialize a customer
-    Customer(int id, const string &n, const string &e,
-             const string &p, const string &ph)
-        : customerID(id), name(n), email(e),
-          passwordHash(p), phone(ph) {}
+    Customer(int id, const string &n, const string &e, const string &p, const string &ph)
+        : customerID(id), name(n), email(e), passwordHash(p), phone(ph) {}
     // Getters
     int getID() const { return customerID; }
     string getName() const { return name; }
